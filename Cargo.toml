@@ -1,0 +1,27 @@
+[package]
+name = "esp-idf-hello"
+version = "0.1.0"
+authors = ["chenhuayou <chen.hua.you@163.com>"]
+edition = "2018"
+resolver = "2"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+pio = ["esp-idf-sys/pio"]
+
+[dependencies]
+esp-idf-sys = { version = "0.31.5", features = ["binstart"] }
+unsafe_fn = "0.1.2"
+log = "0.4"
+esp-idf-svc = "0.41"
+
+
+[build-dependencies]
+embuild = "0.29"
+anyhow = "1"

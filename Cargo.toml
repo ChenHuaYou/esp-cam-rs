@@ -1,5 +1,5 @@
 [package]
-name = "esp-idf-hello"
+name = "esp-cam-rs"
 version = "0.1.0"
 authors = ["chenhuayou <chen.hua.you@163.com>"]
 edition = "2018"
@@ -12,14 +12,14 @@ opt-level = "s"
 debug = true # Symbols are nice and they don't increase the size on Flash
 opt-level = "z"
 
-[features]
-pio = ["esp-idf-sys/pio"]
 
 [dependencies]
-esp-idf-sys = { version = "0.31.5", features = ["binstart"] }
-unsafe_fn = "0.1.2"
-log = "0.4"
+esp-idf-sys = { version = "0.31", features = ["binstart"] }
 esp-idf-svc = "0.41"
+esp-idf-hal = "0.37"
+embedded-svc = "0.21"
+anyhow = "1"
+log = "0.4"
 
 
 [build-dependencies]

@@ -226,9 +226,13 @@ fn main() {
         user_ctx: esp_idf_sys::_NULL as *mut _
     };
     let server:esp_idf_sys::httpd_handle_t = esp_idf_sys::_NULL as *mut _;
+    let mut server: esp_idf_sys::httpd_handle_t = ptr::null_mut();
+    let server_ref = &mut server;
+
     let config:esp_idf_sys::httpd_config_t = default_configuration(80, 443);
     println!("{:?}",config);
-    unsafe{esp_idf_sys::httpd_start(server as *mut *mut c_void, &config)};
+    let status = unsafe{esp_idf_sys::httpd_start(server_ref, &config)};
+    println!("{}--{:?}",status,server);
     unsafe{esp_idf_sys::httpd_register_uri_handler(server, &uri_handler_jpg)};
 
     

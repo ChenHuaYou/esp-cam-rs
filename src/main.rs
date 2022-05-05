@@ -36,6 +36,10 @@ const PASS: &str = env!("RUST_ESP32_STD_DEMO_WIFI_PASS");
 
 
 
+const _STREAM_CONTENT_TYPE:CString = CString::new("multipart/x-mixed-replace;boundary=123456789000000000000987654321").unwrap();
+const _STREAM_BOUNDARY:CString = CString::new("\r\n--123456789000000000000987654321\r\n").unwrap();
+const _STREAM_PART:CString = CString::new("Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n").unwrap();
+
 
 fn mywifi(
     netif_stack: Arc<EspNetifStack>,
@@ -138,10 +142,14 @@ fn myhttpd(mutex: Arc<(Mutex<Option<u32>>, Condvar)>) -> Result<Server> {
 }
 
 unsafe extern "C" fn jpg_stream_httpd_handler(r: *mut esp_idf_sys::httpd_req_t) -> esp_idf_sys::esp_err_t{
+    let mut part_buf = [0;64];
     loop{
         println!("jpg_stream_httpd_handler !!!!!");
         let fb = unsafe{ esp_idf_sys::esp_camera_fb_get()};
         println!("Picture taken! Its size was: {} bytes", unsafe{(*fb).len});
+        esp_idf_sys::httpd_resp_send_chunk(r, _STREAM_BOUNDARY.as_ptr(), esp_idf_sys::strlen(_STREAM_BOUNDARY.as_ptr()) as i32);
+        let hlen = esp_idf_sys::snprintf(part_buf.as_ptr() as *mut i8, 64, _STREAM_PART.as_ptr(), (*fb).len);
+        httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
         unsafe{esp_idf_sys::esp_camera_fb_return(fb);} 
     }
 }
@@ -198,13 +206,14 @@ fn main() {
         ledc_channel : esp_idf_sys::ledc_channel_t_LEDC_CHANNEL_0,
 
         pixel_format : esp_idf_sys::pixformat_t_PIXFORMAT_JPEG, //YUV422,GRAYSCALE,RGB565,JPEG
-        frame_size : esp_idf_sys::framesize_t_FRAMESIZE_96X96 ,    //QQVGA-UXGA Do not use sizes above QVGA when not JPEG
+        frame_size : esp_idf_sys::framesize_t_FRAMESIZE_SVGA ,    //QQVGA-UXGA Do not use sizes above QVGA when not JPEG
 
         jpeg_quality : 12, //0-63 lower number means higher quality
         fb_count : 1,       //if more than one, i2s runs in continuous mode. Use only with JPEG
-        fb_location: esp_idf_sys::camera_fb_location_t_CAMERA_FB_IN_DRAM,
-        grab_mode: esp_idf_sys::camera_grab_mode_t_CAMERA_GRAB_LATEST
+        fb_location: esp_idf_sys::camera_fb_location_t_CAMERA_FB_IN_PSRAM,
+        grab_mode: esp_idf_sys::camera_grab_mode_t_CAMERA_GRAB_WHEN_EMPTY
     };
+    /* wifi */
     let netif_stack = Arc::new(EspNetifStack::new().unwrap());
     let sys_loop_stack = Arc::new(EspSysLoopStack::new().unwrap());
     let default_nvs = Arc::new(EspDefaultNvs::new().unwrap());
@@ -213,15 +222,8 @@ fn main() {
         sys_loop_stack.clone(),
         default_nvs.clone(),
         ).unwrap();
-    if unsafe{esp_idf_sys::esp_camera_init(&camera_config)} != 0{
-        println!("camera init failed!");
-        return;
-    }else{
-        println!("camera ready! >>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-    }
-    //let mutex = Arc::new((Mutex::new(None), Condvar::new()));
-    //let httpd = myhttpd(mutex.clone()).unwrap();
 
+    /* webserver */
     let c_str = CString::new("/stream").unwrap();
     let uri_handler_jpg:esp_idf_sys::httpd_uri_t = esp_idf_sys::httpd_uri_t{
         uri: c_str.as_ptr(),
@@ -238,6 +240,18 @@ fn main() {
     println!("{}--{:?}",status,server);
     unsafe{esp_idf_sys::httpd_register_uri_handler(server, &uri_handler_jpg)};
 
+    /* camera */
+
+    if unsafe{esp_idf_sys::esp_camera_init(&camera_config)} != 0{
+        println!("camera init failed!");
+        return;
+    }else{
+        println!("camera ready! >>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+    }
+    //let mutex = Arc::new((Mutex::new(None), Condvar::new()));
+    //let httpd = myhttpd(mutex.clone()).unwrap();
+
+
     
     for s in 0..360 {
         println!("Shutting down in {} secs", 3 - s);
@@ -245,7 +259,7 @@ fn main() {
         thread::sleep(Duration::from_secs(1));
     }
 
-    println!("Httpd stopped");
+    //let mut num = 0;
     //loop{
     //    println!("Taking picture ... {}",num);
     //    let fb = unsafe{ esp_idf_sys::esp_camera_fb_get()};

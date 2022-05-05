@@ -36,9 +36,6 @@ const PASS: &str = env!("RUST_ESP32_STD_DEMO_WIFI_PASS");
 
 
 
-const _STREAM_CONTENT_TYPE:CString = CString::new("multipart/x-mixed-replace;boundary=123456789000000000000987654321").unwrap();
-const _STREAM_BOUNDARY:CString = CString::new("\r\n--123456789000000000000987654321\r\n").unwrap();
-const _STREAM_PART:CString = CString::new("Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n").unwrap();
 
 
 fn mywifi(
@@ -142,6 +139,10 @@ fn myhttpd(mutex: Arc<(Mutex<Option<u32>>, Condvar)>) -> Result<Server> {
 }
 
 unsafe extern "C" fn jpg_stream_httpd_handler(r: *mut esp_idf_sys::httpd_req_t) -> esp_idf_sys::esp_err_t{
+    let _STREAM_CONTENT_TYPE:CString = CString::new("multipart/x-mixed-replace;boundary=123456789000000000000987654321").unwrap();
+    let _STREAM_BOUNDARY:CString = CString::new("\r\n--123456789000000000000987654321\r\n").unwrap();
+    let _STREAM_PART:CString = CString::new("Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n").unwrap();
+
     let mut part_buf = [0;64];
     loop{
         println!("jpg_stream_httpd_handler !!!!!");
@@ -149,7 +150,8 @@ unsafe extern "C" fn jpg_stream_httpd_handler(r: *mut esp_idf_sys::httpd_req_t) 
         println!("Picture taken! Its size was: {} bytes", unsafe{(*fb).len});
         esp_idf_sys::httpd_resp_send_chunk(r, _STREAM_BOUNDARY.as_ptr(), esp_idf_sys::strlen(_STREAM_BOUNDARY.as_ptr()) as i32);
         let hlen = esp_idf_sys::snprintf(part_buf.as_ptr() as *mut i8, 64, _STREAM_PART.as_ptr(), (*fb).len);
-        httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+        esp_idf_sys::httpd_resp_send_chunk(r, part_buf.as_ptr() as *mut i8, hlen);
+        esp_idf_sys::httpd_resp_send_chunk(r, ((*fb).buf) as *const _, hlen);
         unsafe{esp_idf_sys::esp_camera_fb_return(fb);} 
     }
 }

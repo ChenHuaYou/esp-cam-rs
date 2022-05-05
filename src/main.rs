@@ -140,6 +140,9 @@ fn myhttpd(mutex: Arc<(Mutex<Option<u32>>, Condvar)>) -> Result<Server> {
 unsafe extern "C" fn jpg_stream_httpd_handler(r: *mut esp_idf_sys::httpd_req_t) -> esp_idf_sys::esp_err_t{
     loop{
         println!("jpg_stream_httpd_handler !!!!!");
+        let fb = unsafe{ esp_idf_sys::esp_camera_fb_get()};
+        println!("Picture taken! Its size was: {} bytes", unsafe{(*fb).len});
+        unsafe{esp_idf_sys::esp_camera_fb_return(fb);} 
     }
 }
 fn default_configuration(http_port: u16, https_port: u16) -> esp_idf_sys::httpd_config_t {
@@ -219,13 +222,13 @@ fn main() {
     //let mutex = Arc::new((Mutex::new(None), Condvar::new()));
     //let httpd = myhttpd(mutex.clone()).unwrap();
 
-    let uri_handler_jpg = esp_idf_sys::httpd_uri_t{
-        uri:CString::new("/stream.jpg").unwrap().as_ptr(),
+    let c_str = CString::new("/stream").unwrap();
+    let uri_handler_jpg:esp_idf_sys::httpd_uri_t = esp_idf_sys::httpd_uri_t{
+        uri: c_str.as_ptr(),
         method: esp_idf_sys::http_method_HTTP_GET,
         handler: Some(jpg_stream_httpd_handler),
-        user_ctx: esp_idf_sys::_NULL as *mut _
+        user_ctx: ptr::null_mut()
     };
-    let server:esp_idf_sys::httpd_handle_t = esp_idf_sys::_NULL as *mut _;
     let mut server: esp_idf_sys::httpd_handle_t = ptr::null_mut();
     let server_ref = &mut server;
 
@@ -238,6 +241,7 @@ fn main() {
     
     for s in 0..360 {
         println!("Shutting down in {} secs", 3 - s);
+        //println!("{:?}",uri_handler_jpg);
         thread::sleep(Duration::from_secs(1));
     }
 

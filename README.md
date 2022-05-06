@@ -7,3 +7,6 @@ following this command:
 4. RUST_ESP32_STD_DEMO_WIFI_SSID=MC RUST_ESP32_STD_DEMO_WIFI_PASS=mc541982 cargo build //change ssid and passowrd to your own.
 5. espflash /dev/ttyUSB0 target/xtensa-esp32-espidf/debug/esp-cam-rs
 6. espmonitor /dev/ttyUSB0
+
+
+OKAY!

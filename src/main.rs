@@ -144,15 +144,16 @@ unsafe extern "C" fn jpg_stream_httpd_handler(r: *mut esp_idf_sys::httpd_req_t) 
     let _STREAM_PART:CString = CString::new("Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n").unwrap();
 
     let mut part_buf = [0;64];
+    esp_idf_sys::httpd_resp_set_type(r, _STREAM_CONTENT_TYPE.as_ptr());
     loop{
-        println!("jpg_stream_httpd_handler !!!!!");
-        let fb = unsafe{ esp_idf_sys::esp_camera_fb_get()};
-        println!("Picture taken! Its size was: {} bytes", unsafe{(*fb).len});
+        //println!("jpg_stream_httpd_handler !!!!!");
+        let fb = esp_idf_sys::esp_camera_fb_get();
+        //println!("Picture taken! Its size was: {} bytes", unsafe{(*fb).len});
         esp_idf_sys::httpd_resp_send_chunk(r, _STREAM_BOUNDARY.as_ptr(), esp_idf_sys::strlen(_STREAM_BOUNDARY.as_ptr()) as i32);
         let hlen = esp_idf_sys::snprintf(part_buf.as_ptr() as *mut i8, 64, _STREAM_PART.as_ptr(), (*fb).len);
         esp_idf_sys::httpd_resp_send_chunk(r, part_buf.as_ptr() as *mut i8, hlen);
-        esp_idf_sys::httpd_resp_send_chunk(r, ((*fb).buf) as *const _, hlen);
-        unsafe{esp_idf_sys::esp_camera_fb_return(fb);} 
+        esp_idf_sys::httpd_resp_send_chunk(r, (*fb).buf as *mut i8, (*fb).len as i32);
+        esp_idf_sys::esp_camera_fb_return(fb); 
     }
 }
 fn default_configuration(http_port: u16, https_port: u16) -> esp_idf_sys::httpd_config_t {
@@ -208,7 +209,7 @@ fn main() {
         ledc_channel : esp_idf_sys::ledc_channel_t_LEDC_CHANNEL_0,
 
         pixel_format : esp_idf_sys::pixformat_t_PIXFORMAT_JPEG, //YUV422,GRAYSCALE,RGB565,JPEG
-        frame_size : esp_idf_sys::framesize_t_FRAMESIZE_SVGA ,    //QQVGA-UXGA Do not use sizes above QVGA when not JPEG
+        frame_size : esp_idf_sys::framesize_t_FRAMESIZE_QVGA ,    //QQVGA-UXGA Do not use sizes above QVGA when not JPEG
 
         jpeg_quality : 12, //0-63 lower number means higher quality
         fb_count : 1,       //if more than one, i2s runs in continuous mode. Use only with JPEG
@@ -226,7 +227,7 @@ fn main() {
         ).unwrap();
 
     /* webserver */
-    let c_str = CString::new("/stream").unwrap();
+    let c_str = CString::new("/stream.jpg").unwrap();
     let uri_handler_jpg:esp_idf_sys::httpd_uri_t = esp_idf_sys::httpd_uri_t{
         uri: c_str.as_ptr(),
         method: esp_idf_sys::http_method_HTTP_GET,
@@ -254,12 +255,14 @@ fn main() {
     //let httpd = myhttpd(mutex.clone()).unwrap();
 
 
+    //loop{}
     
-    for s in 0..360 {
-        println!("Shutting down in {} secs", 3 - s);
-        //println!("{:?}",uri_handler_jpg);
-        thread::sleep(Duration::from_secs(1));
-    }
+    thread::sleep(Duration::from_secs(36000));
+    //for s in 0..360 {
+    //    println!("Shutting down in {} secs", 3 - s);
+    //    //println!("{:?}",uri_handler_jpg);
+    //    thread::sleep(Duration::from_secs(1));
+    //}
 
     //let mut num = 0;
     //loop{

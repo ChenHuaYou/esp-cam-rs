@@ -257,7 +257,10 @@ fn main() {
 
     //loop{}
     
-    thread::sleep(Duration::from_secs(36000));
+    loop{
+        thread::sleep(Duration::from_secs(10));
+    }
+    
     //for s in 0..360 {
     //    println!("Shutting down in {} secs", 3 - s);
     //    //println!("{:?}",uri_handler_jpg);

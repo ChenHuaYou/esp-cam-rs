@@ -1,3 +1,4 @@
+use esp_idf_svc::http::client::EspHttpClient;
 use esp_idf_svc::netif::EspNetifStack;
 use esp_idf_svc::sysloop::EspSysLoopStack;
 use std::sync::Arc;
@@ -30,6 +31,12 @@ use std::thread;
 use std::ffi::CString;
 use esp_idf_sys::c_types::c_void;
 use core::{marker::PhantomData, ptr};
+use std::fs;
+use std::path::PathBuf;
+use std::net::TcpStream;
+use esp_idf_svc::http;
+
+use std::io::{Write,Read};
 
 const SSID: &str = env!("RUST_ESP32_STD_DEMO_WIFI_SSID");
 const PASS: &str = env!("RUST_ESP32_STD_DEMO_WIFI_PASS");
@@ -46,20 +53,20 @@ fn mywifi(
     println!("hello -------------------------------------------> wifi?");
     let mut wifi = Box::new(EspWifi::new(netif_stack, sys_loop_stack, default_nvs)?);
 
-    info!("Wifi created, about to scan");
+    println!("Wifi created, about to scan");
 
     let ap_infos = wifi.scan()?;
 
     let ours = ap_infos.into_iter().find(|a| a.ssid == SSID);
 
     let channel = if let Some(ours) = ours {
-        info!(
+        println!(
             "Found configured access point {} on channel {}",
             SSID, ours.channel
         );
         Some(ours.channel)
     } else {
-        info!(
+        println!(
             "Configured access point {} not found during scanning, will go with unknown channel",
             SSID
         );
@@ -80,7 +87,7 @@ fn mywifi(
         },
     ))?;
 
-    info!("Wifi configuration set, about to get status");
+    println!("Wifi configuration set, about to get status");
 
     wifi.wait_status_with_timeout(Duration::from_secs(20), |status| !status.is_transitional())
         .map_err(|e| anyhow::anyhow!("Unexpected Wifi status: {:?}", e))?;
@@ -103,7 +110,7 @@ fn mywifi(
 }
 
 fn ping(ip_settings: &ipv4::ClientSettings) -> Result<()> {
-    info!("About to do some pings for {:?}", ip_settings);
+    println!("About to do some pings for {:?}", ip_settings);
 
     let ping_summary =
         EspPing::default().ping(ip_settings.subnet.gateway, &Default::default())?;
@@ -114,7 +121,7 @@ fn ping(ip_settings: &ipv4::ClientSettings) -> Result<()> {
         );
     }
 
-    info!("Pinging done");
+    println!("Pinging done");
 
     Ok(())
 }
@@ -180,6 +187,87 @@ fn default_configuration(http_port: u16, https_port: u16) -> esp_idf_sys::httpd_
     }
 }
 
+fn test_fs() -> Result<()> {
+    assert_eq!(fs::canonicalize(PathBuf::from("."))?, PathBuf::from("/"));
+    assert_eq!(
+        fs::canonicalize(
+            PathBuf::from("/")
+                .join("foo")
+                .join("bar")
+                .join(".")
+                .join("..")
+                .join("baz")
+        )?,
+        PathBuf::from("/foo/baz")
+    );
+
+    Ok(())
+}
+
+fn test_tcp(host:&str,port:&str,uri:&str){
+    println!("About to open a TCP connection to {} : {}",host,port);
+
+    let mut stream = TcpStream::connect(format!("{}:{}",host,port)).unwrap();
+
+    let err = stream.try_clone();
+    if let Err(err) = err {
+        println!(
+            "Duplication of file descriptors does not work (yet) on the ESP-IDF, as expected: {}",
+            err
+        );
+    }
+
+    loop{
+        let fb = unsafe{esp_idf_sys::esp_camera_fb_get()};
+        println!("Picture taken! Its size was: {} bytes", unsafe{(*fb).len});
+
+        stream.write_all(format!("POST {} HTTP/1.0 Content-Type:application/json;charset=utf-8 {{\"content\":{:?}}}",uri,unsafe{(*fb).buf}).as_bytes()).unwrap();
+
+        let mut result = Vec::new();
+
+        stream.read_to_end(&mut result).unwrap();
+
+        println!(
+            "1.1.1.1 returned:\n=================\n{}\n=================\nSince it returned something, all is OK",
+            std::str::from_utf8(&result).unwrap());
+
+    }
+
+}
+
+
+fn test_https_client() -> anyhow::Result<()> {
+    use esp_idf_svc::http::client::*;
+    use embedded_svc::http::client::*;
+    use embedded_svc::io::Bytes;
+
+    let url = String::from("http://192.168.0.106:8080/fuckyou");
+
+    println!("About to fetch content from {}", url);
+
+
+    let mut client = EspHttpClient::new(&EspHttpClientConfiguration {
+        crt_bundle_attach: Some(esp_idf_sys::esp_crt_bundle_attach),
+        ..Default::default()
+    })?;
+    let post_data = "data:{\"field1\":\"value\"}";
+    unsafe{esp_idf_sys::esp_http_client_set_header(client.raw, "Content-Type".as_ptr() as *const _, "application/json".as_ptr() as *const _)};
+    unsafe{esp_idf_sys::esp_http_client_set_post_field(client.raw, post_data.as_ptr() as *const _, post_data.len() as i32)};
+    //let response = client.get(&url)?.submit()?;
+    let response = client.post(&url)?.submit()?;
+
+    let body: Result<Vec<u8>, _> = Bytes::<_, 64>::new(response.reader()).take(3084).collect();
+
+    let body = body?;
+
+    println!(
+        "Body (truncated to 3K):\n{:?}",
+        String::from_utf8_lossy(&body).into_owned()
+        );
+
+    Ok(())
+}
+
 fn main() {
     // Temporary. Will disappear once ESP-IDF 4.4 is released, but for now it is necessary to call this function once,
     // or else some patches to the runtime implemented by esp-idf-sys might not link properly.
@@ -227,21 +315,21 @@ fn main() {
         ).unwrap();
 
     /* webserver */
-    let c_str = CString::new("/stream.jpg").unwrap();
-    let uri_handler_jpg:esp_idf_sys::httpd_uri_t = esp_idf_sys::httpd_uri_t{
-        uri: c_str.as_ptr(),
-        method: esp_idf_sys::http_method_HTTP_GET,
-        handler: Some(jpg_stream_httpd_handler),
-        user_ctx: ptr::null_mut()
-    };
-    let mut server: esp_idf_sys::httpd_handle_t = ptr::null_mut();
-    let server_ref = &mut server;
+    //let c_str = CString::new("/stream.jpg").unwrap();
+    //let uri_handler_jpg:esp_idf_sys::httpd_uri_t = esp_idf_sys::httpd_uri_t{
+    //    uri: c_str.as_ptr(),
+    //    method: esp_idf_sys::http_method_HTTP_GET,
+    //    handler: Some(jpg_stream_httpd_handler),
+    //    user_ctx: ptr::null_mut()
+    //};
+    //let mut server: esp_idf_sys::httpd_handle_t = ptr::null_mut();
+    //let server_ref = &mut server;
 
-    let config:esp_idf_sys::httpd_config_t = default_configuration(80, 443);
-    println!("{:?}",config);
-    let status = unsafe{esp_idf_sys::httpd_start(server_ref, &config)};
-    println!("{}--{:?}",status,server);
-    unsafe{esp_idf_sys::httpd_register_uri_handler(server, &uri_handler_jpg)};
+    //let config:esp_idf_sys::httpd_config_t = default_configuration(80, 443);
+    //println!("{:?}",config);
+    //let status = unsafe{esp_idf_sys::httpd_start(server_ref, &config)};
+    //println!("{}--{:?}",status,server);
+    //unsafe{esp_idf_sys::httpd_register_uri_handler(server, &uri_handler_jpg)};
 
     /* camera */
 
@@ -256,7 +344,10 @@ fn main() {
 
 
     //loop{}
-    
+
+    //test_fs();
+    //1test_tcp("192.168.0.106","8080","/fuckyou");
+    test_https_client();
     loop{
         thread::sleep(Duration::from_secs(10));
     }

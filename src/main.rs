@@ -228,8 +228,10 @@ fn test_tcp(host:&str,port:&str,uri:&str){
         }
         println!("Picture taken! Its size was: {} bytes", unsafe{(*fb).len});
         let mut buf = String::new();
-        base64::encode_config_buf(v, base64::STANDARD, &mut buf);
-        stream.write_all(format!("POST {} HTTP/1.1\r\nHost: 127.0.0.1:9515\r\nContent-Type: application/json\r\nContent-Length: 47\r\n\r\n{{\"image\": {}, \"desiredCapabilities\": {{}}}}",uri,buf).as_bytes()).unwrap();
+        //base64::encode_config_buf(v, base64::URL_SAFE, &mut buf);
+        base64::encode_config_buf(b"hello internet", base64::URL_SAFE, &mut buf);
+        println!("{}",buf);
+        stream.write_all(format!("POST {} HTTP/1.1\r\nHost: 127.0.0.1:9515\r\nContent-Type: application/json\r\nContent-Length: 17\r\n\r\n{{\"image\":\"hello\"}}",uri).as_bytes()).unwrap();
 
         let mut result = Vec::new();
 

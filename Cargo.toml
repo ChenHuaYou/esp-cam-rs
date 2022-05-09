@@ -23,6 +23,7 @@ esp-idf-hal = "0.37"
 embedded-svc = "0.21"
 anyhow = "1"
 log = "0.4"
+base64 = "0.13.0"
 
 
 [build-dependencies]

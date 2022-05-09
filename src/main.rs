@@ -204,6 +204,8 @@ fn test_fs() -> Result<()> {
     Ok(())
 }
 
+
+use std::ptr::copy_nonoverlapping;
 fn test_tcp(host:&str,port:&str,uri:&str){
     println!("About to open a TCP connection to {} : {}",host,port);
 
@@ -219,16 +221,22 @@ fn test_tcp(host:&str,port:&str,uri:&str){
 
     loop{
         let fb = unsafe{esp_idf_sys::esp_camera_fb_get()};
+        let mut v = Vec::<u8>::with_capacity(unsafe{(*fb).len} as usize);
+        unsafe {
+            copy_nonoverlapping((*fb).buf, v.as_mut_ptr(), (*fb).len as usize);
+            v.set_len((*fb).len as usize);
+        }
         println!("Picture taken! Its size was: {} bytes", unsafe{(*fb).len});
-
-        stream.write_all(format!("POST {} HTTP/1.0 Content-Type:application/json;charset=utf-8 {{\"content\":{:?}}}",uri,unsafe{(*fb).buf}).as_bytes()).unwrap();
+        let mut buf = String::new();
+        base64::encode_config_buf(v, base64::STANDARD, &mut buf);
+        stream.write_all(format!("POST {} HTTP/1.1\r\nHost: 127.0.0.1:9515\r\nContent-Type: application/json\r\nContent-Length: 47\r\n\r\n{{\"image\": {}, \"desiredCapabilities\": {{}}}}",uri,buf).as_bytes()).unwrap();
 
         let mut result = Vec::new();
 
         stream.read_to_end(&mut result).unwrap();
 
         println!(
-            "1.1.1.1 returned:\n=================\n{}\n=================\nSince it returned something, all is OK",
+            "returned:\n=================\n{}\n=================\nSince it returned something, all is OK",
             std::str::from_utf8(&result).unwrap());
 
     }
@@ -346,8 +354,8 @@ fn main() {
     //loop{}
 
     //test_fs();
-    //1test_tcp("192.168.0.106","8080","/fuckyou");
-    test_https_client();
+    test_tcp("192.168.0.106","8080","/fuckyou");
+    //test_https_client();
     loop{
         thread::sleep(Duration::from_secs(10));
     }
